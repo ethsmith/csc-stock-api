@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using Csx.Api.Auth;
 using Csx.Api.Background;
@@ -12,6 +13,7 @@ using Csx.Infrastructure.Ledger;
 using Csx.Infrastructure.Market;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -39,6 +41,17 @@ try
     builder.Services.AddSignalR();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
+    builder.Services.Configure<ForwardedHeadersOptions>(o =>
+    {
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor
+            | ForwardedHeaders.XForwardedProto
+            | ForwardedHeaders.XForwardedHost;
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+        o.KnownProxies.Add(IPAddress.Loopback);
+        o.KnownProxies.Add(IPAddress.IPv6Loopback);
+        o.ForwardLimit = 1;
+    });
 
     var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -117,6 +130,7 @@ try
 
     var app = builder.Build();
 
+    app.UseForwardedHeaders();
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler(err => err.Run(async ctx =>
     {
