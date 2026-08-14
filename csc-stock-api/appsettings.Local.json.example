@@ -1,0 +1,8 @@
+{
+  "Discord": {
+    "ClientSecret": "paste-discord-oauth-client-secret"
+  },
+  "Jwt": {
+    "SigningKey": "change-me-to-a-32-byte-secret!!!!!!!!"
+  }
+}

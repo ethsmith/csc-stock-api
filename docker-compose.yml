@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: csx
+      POSTGRES_PASSWORD: csx
+      POSTGRES_DB: csx
+    ports:
+      - "5433:5432"
+    volumes:
+      - csx-pg:/var/lib/postgresql/data
+
+volumes:
+  csx-pg:

@@ -1,0 +1,50 @@
+@host = http://localhost:5233
+
+### Health
+GET {{host}}/health
+
+### Dev login
+POST {{host}}/api/v1/auth/dev
+Content-Type: application/json
+
+{
+  "discordId": "1234567890",
+  "displayName": "ethan"
+}
+
+### Me
+GET {{host}}/api/v1/me
+Authorization: Bearer {{token}}
+
+### Franchises
+GET {{host}}/api/v1/franchises
+
+### Quote buy
+POST {{host}}/api/v1/quotes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "franchiseId": 1,
+  "side": "buy",
+  "cashIn": "50.00"
+}
+
+### Fill
+POST {{host}}/api/v1/orders
+Authorization: Bearer {{token}}
+Idempotency-Key: {{$guid}}
+Content-Type: application/json
+
+{
+  "quoteId": "q_replace_me",
+  "maxSlippageBps": 100
+}
+
+### Portfolio
+GET {{host}}/api/v1/portfolio
+Authorization: Bearer {{token}}
+
+### Admin sync from CSC Core
+POST {{host}}/api/v1/admin/sync
+Authorization: Bearer {{token}}
