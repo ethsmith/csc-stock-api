@@ -164,12 +164,22 @@ volumes:
 EOF
 docker compose -f /opt/csx/db/docker-compose.yml up -d
 echo "Waiting for Postgres..."
-for _ in $(seq 1 40); do
-  if docker compose -f /opt/csx/db/docker-compose.yml exec -T db pg_isready -U csx -d csx >/dev/null 2>&1; then
+ready=0
+for i in $(seq 1 30); do
+  if timeout 2 bash -c 'echo >/dev/tcp/127.0.0.1/5432' >/dev/null 2>&1; then
+    ready=1
+    echo "Postgres is ready"
     break
   fi
+  echo "  still waiting ($i/30)"
   sleep 1
 done
+if [[ "$ready" -ne 1 ]]; then
+  echo "Postgres did not open 127.0.0.1:5432" >&2
+  docker compose -f /opt/csx/db/docker-compose.yml ps || true
+  docker compose -f /opt/csx/db/docker-compose.yml logs --tail 80 || true
+  exit 1
+fi
 
 echo "==> Clone GitHub repos"
 clone_repo "$API_REPO" "$API_SRC"
