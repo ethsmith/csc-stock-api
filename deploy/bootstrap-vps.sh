@@ -165,15 +165,20 @@ EOF
 docker compose -f /opt/csx/db/docker-compose.yml up -d
 echo "Waiting for Postgres..."
 ready=0
-for i in $(seq 1 30); do
-  if timeout 2 bash -c 'echo >/dev/tcp/127.0.0.1/5432' >/dev/null 2>&1; then
-    ready=1
-    echo "Postgres is ready"
-    break
-  fi
-  echo "  still waiting ($i/30)"
-  sleep 1
-done
+if [[ "${SKIP_PG_WAIT:-0}" == 1 ]]; then
+  ready=1
+  echo "Skipping Postgres wait (SKIP_PG_WAIT=1)"
+else
+  for i in $(seq 1 30); do
+    if python3 -c 'import socket; s=socket.create_connection(("127.0.0.1", 5432), 2); s.close()' 2>/dev/null; then
+      ready=1
+      echo "Postgres is ready"
+      break
+    fi
+    echo "  still waiting ($i/30)"
+    sleep 1
+  done
+fi
 if [[ "$ready" -ne 1 ]]; then
   echo "Postgres did not open 127.0.0.1:5432" >&2
   docker compose -f /opt/csx/db/docker-compose.yml ps || true
