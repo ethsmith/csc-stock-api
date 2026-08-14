@@ -173,29 +173,40 @@ public sealed class CandleAggregatorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await AggregateAsync(stoppingToken);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         while (await timer.WaitForNextTickAsync(stoppingToken))
+            await AggregateAsync(stoppingToken);
+    }
+
+    private async Task AggregateAsync(CancellationToken stoppingToken)
+    {
+        try
         {
-            try
+            await using var scope = _scopes.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<CsxDbContext>();
+            var since = DateTimeOffset.UtcNow.AddHours(-24);
+            var ticks = await db.PriceTicks.Where(t => t.At >= since).ToListAsync(stoppingToken);
+            foreach (var group in ticks.GroupBy(t => t.FranchiseId))
             {
-                await using var scope = _scopes.CreateAsyncScope();
-                var db = scope.ServiceProvider.GetRequiredService<CsxDbContext>();
-                var since = DateTimeOffset.UtcNow.AddMinutes(-5);
-                var ticks = await db.PriceTicks.Where(t => t.At >= since).ToListAsync(stoppingToken);
-                foreach (var group in ticks.GroupBy(t => t.FranchiseId))
-                {
-                    Upsert(db, group.Key, "5m", Floor(group.Min(t => t.At), TimeSpan.FromMinutes(5)), group);
-                    Upsert(db, group.Key, "1h", Floor(group.Min(t => t.At), TimeSpan.FromHours(1)), group);
-                    Upsert(db, group.Key, "1d", Floor(group.Min(t => t.At), TimeSpan.FromDays(1)), group);
-                }
-                await db.SaveChangesAsync(stoppingToken);
+                var list = group.ToList();
+                foreach (var bucket in DistinctFloors(list, TimeSpan.FromMinutes(5)))
+                    Upsert(db, group.Key, "5m", bucket, list);
+                foreach (var bucket in DistinctFloors(list, TimeSpan.FromHours(1)))
+                    Upsert(db, group.Key, "1h", bucket, list);
+                foreach (var bucket in DistinctFloors(list, TimeSpan.FromDays(1)))
+                    Upsert(db, group.Key, "1d", bucket, list);
             }
-            catch (Exception ex)
-            {
-                _log.LogWarning(ex, "Candle aggregation failed");
-            }
+            await db.SaveChangesAsync(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Candle aggregation failed");
         }
     }
+
+    private static IEnumerable<DateTimeOffset> DistinctFloors(IReadOnlyList<PriceTick> ticks, TimeSpan size) =>
+        ticks.Select(t => Floor(t.At, size)).Distinct();
 
     private static DateTimeOffset Floor(DateTimeOffset at, TimeSpan size)
     {

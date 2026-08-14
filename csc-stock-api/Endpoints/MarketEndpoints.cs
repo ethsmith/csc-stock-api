@@ -218,12 +218,18 @@ public static class MarketEndpoints
             .ToListAsync(ct);
         var sparkById = sparks
             .GroupBy(c => c.FranchiseId)
-            .ToDictionary(g => g.Key, g =>
-            {
-                var hourly = g.Where(c => c.Timeframe == "1h").Select(c => MoneyFormat.Price(c.Close)).ToList();
-                if (hourly.Count > 0) return (IReadOnlyList<string>)hourly;
-                return (IReadOnlyList<string>)g.Where(c => c.Timeframe == "5m").Select(c => MoneyFormat.Price(c.Close)).ToList();
-            });
+            .ToDictionary(g => g.Key, PickSpark);
+
+        var recentTicks = await db.PriceTicks
+            .Where(t => t.At >= cutoff)
+            .OrderBy(t => t.At)
+            .Select(t => new { t.FranchiseId, t.Price })
+            .ToListAsync(ct);
+        var tickSparkById = recentTicks
+            .GroupBy(t => t.FranchiseId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<string>)g.Select(t => MoneyFormat.Price(t.Price)).ToList());
 
         return rows.Select(f =>
         {
@@ -234,6 +240,10 @@ public static class MarketEndpoints
             var change = p24 == 0m ? 0m : (price - p24) / p24;
             var cap = price * (pool?.TotalSupply ?? 0);
             sparkById.TryGetValue(f.Id, out var spark);
+            if ((spark is null || spark.Count < 2) && tickSparkById.TryGetValue(f.Id, out var fromTicks) && fromTicks.Count >= 2)
+                spark = fromTicks;
+            if (spark is null || spark.Count < 2)
+                spark = [MoneyFormat.Price(price), MoneyFormat.Price(price)];
             return new FranchiseListItem(
                 f.Id, f.Ticker, f.Name, f.Org?.Name, f.Division, f.IsActive,
                 pool?.IsHalted ?? false,
@@ -243,8 +253,18 @@ public static class MarketEndpoints
                 MoneyFormat.Pct(change),
                 MoneyFormat.Cash(cap),
                 pool?.Seq ?? 0,
-                spark ?? []);
+                spark);
         }).ToList();
+    }
+
+    private static IReadOnlyList<string> PickSpark(IGrouping<long, Candle> g)
+    {
+        var hourly = g.Where(c => c.Timeframe == "1h").Select(c => MoneyFormat.Price(c.Close)).ToList();
+        var five = g.Where(c => c.Timeframe == "5m").Select(c => MoneyFormat.Price(c.Close)).ToList();
+        if (hourly.Count >= 2) return hourly;
+        if (five.Count >= 2) return five;
+        if (hourly.Count > 0) return hourly;
+        return five;
     }
 
     private static async Task<FranchiseDetail?> BuildDetail(
