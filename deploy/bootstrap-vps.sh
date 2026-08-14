@@ -50,18 +50,21 @@ prompt() {
 
 clone_repo() {
   local url="$1" dest="$2"
+  export GIT_TERMINAL_PROMPT=0
+  echo "Cloning $url -> $dest"
   if [[ -d "$dest/.git" ]]; then
-    git -C "$dest" fetch --quiet origin
-    git -C "$dest" checkout --quiet "$BRANCH"
-    git -C "$dest" reset --hard --quiet "origin/$BRANCH"
+    git -C "$dest" fetch origin
+    git -C "$dest" checkout "$BRANCH"
+    git -C "$dest" reset --hard "origin/$BRANCH"
     return
   fi
   mkdir -p "$(dirname "$dest")"
+  rm -rf "$dest"
   if [[ -n "${GH_TOKEN:-}" ]]; then
     local authed="${url/https:\/\//https:\/\/x-access-token:${GH_TOKEN}@}"
-    git clone --branch "$BRANCH" "$authed" "$dest"
+    git clone --depth 1 --branch "$BRANCH" "$authed" "$dest"
   else
-    git clone --branch "$BRANCH" "$url" "$dest"
+    git clone --depth 1 --branch "$BRANCH" "$url" "$dest"
   fi
 }
 
@@ -135,6 +138,7 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DB=csx
 EOF
 fi
+umask 022
 chmod 600 /etc/csx/db.env
 # shellcheck disable=SC1091
 source /etc/csx/db.env
@@ -170,7 +174,11 @@ done
 echo "==> Clone GitHub repos"
 clone_repo "$API_REPO" "$API_SRC"
 clone_repo "$FRONTEND_REPO" "$FRONTEND_SRC"
-chmod +x "$API_SRC"/deploy/*.sh "$FRONTEND_SRC"/deploy/*.sh
+chmod +x \
+  "$API_SRC/deploy/update.sh" \
+  "$API_SRC/deploy/csx-deploy.sh" \
+  "$API_SRC/deploy/bootstrap-vps.sh" \
+  "$FRONTEND_SRC/deploy/update.sh"
 
 echo "==> App secrets"
 # shellcheck disable=SC1091
@@ -319,7 +327,9 @@ if [[ "${SKIP_CERTBOT:-0}" != 1 ]]; then
     exit 1
   fi
   if [[ -n "$vps_ip" && "$vps_ip" != "$apex_ip" ]]; then
-    echo "DNS ${DOMAIN} -> ${apex_ip} does not match this VPS (${vps_ip}). Fix the A record and re-run." >&2
+    echo "DNS ${DOMAIN} -> ${apex_ip} does not match this VPS (${vps_ip})." >&2
+    echo "If the domain is orange-clouded on Cloudflare, set the A record to DNS-only (grey cloud) and re-run." >&2
+    echo "Otherwise fix the A record to this machine's public IP." >&2
     exit 1
   fi
 
