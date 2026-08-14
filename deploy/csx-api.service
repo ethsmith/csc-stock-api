@@ -1,0 +1,20 @@
+[Unit]
+Description=CSX stock API
+After=network-online.target docker.service
+Wants=network-online.target
+Wants=docker.service
+
+[Service]
+WorkingDirectory=/var/www/csx/api
+TimeoutStartSec=600
+ExecStartPre=+/opt/csx/src/api/deploy/update.sh
+ExecStart=/usr/bin/dotnet /var/www/csx/api/Csx.Api.dll
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+SyslogIdentifier=csx-api
+User=www-data
+EnvironmentFile=/etc/csx/csx.env
+
+[Install]
+WantedBy=multi-user.target

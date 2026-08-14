@@ -1,0 +1,9 @@
+[Unit]
+Description=Pull CSX API + frontend from GitHub and reload
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=900
+ExecStart=/opt/csx/src/api/deploy/csx-deploy.sh
