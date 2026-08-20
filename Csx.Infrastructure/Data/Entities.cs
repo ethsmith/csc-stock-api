@@ -58,6 +58,7 @@ public static class TickSources
     public const string Decay = "decay";
     public const string Admin = "admin";
     public const string ImpliedOpen = "implied_open";
+    public const string ImpliedOpenRestore = "implied_open_restore";
 }
 
 public static class EventKinds

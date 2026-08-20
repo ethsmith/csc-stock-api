@@ -112,6 +112,12 @@ public class ShockMathTests
         var final = ShockMath.ApplyCircuitBreaker(10m, 10m, 14m, 0.25m);
         final.Should().Be(12.5m);
     }
+
+    [Fact]
+    public void Decay_tick_with_zero_lambda_is_identity()
+    {
+        ShockMath.DecayTick(10.26m, 6.79m, 0m).Should().Be(10.26m);
+    }
 }
 
 public class MoneyRoundingTests

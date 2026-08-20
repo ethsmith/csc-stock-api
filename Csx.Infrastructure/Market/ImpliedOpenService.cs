@@ -63,7 +63,28 @@ public sealed class ImpliedOpenService
     public async Task<bool> HasAppliedAsync(CancellationToken ct) =>
         await _db.PriceTicks.AnyAsync(t => t.Source == TickSources.ImpliedOpen, ct);
 
-    public async Task<ImpliedOpenApplyResult> EnsureAppliedAsync(CancellationToken ct, bool force = false)
+    /// <summary>
+    /// Replays implied open onto current pools once, to unwind decay. Does not debit user cash
+    /// or change share holdings — only pool cash (the mark) moves.
+    /// </summary>
+    public async Task<ImpliedOpenApplyResult> RestoreOnceAfterDecayAsync(CancellationToken ct)
+    {
+        if (!_options.RestoreAfterDecay)
+            return Skip("restore after decay disabled");
+        if (await _db.PriceTicks.AnyAsync(t => t.Source == TickSources.ImpliedOpenRestore, ct))
+            return Skip("decay restore already applied");
+        if (!await _db.PriceTicks.AnyAsync(t => t.Source == TickSources.Decay, ct))
+            return Skip("no decay ticks");
+
+        _log.LogInformation(
+            "Re-applying implied open to unwind decay; user cash and share holdings are unchanged");
+        return await EnsureAppliedAsync(ct, force: true, tickSource: TickSources.ImpliedOpenRestore);
+    }
+
+    public async Task<ImpliedOpenApplyResult> EnsureAppliedAsync(
+        CancellationToken ct,
+        bool force = false,
+        string? tickSource = null)
     {
         if (!_options.Auto && !force)
             return Skip("auto disabled");
@@ -141,7 +162,12 @@ public sealed class ImpliedOpenService
             if (!byKey.TryGetValue(line.Key, out var franchise) || franchise.Pool is null)
                 continue;
 
-            await ApplyPriceAsync(franchise, line.Price, line.Matches, ct);
+            await ApplyPriceAsync(
+                franchise,
+                line.Price,
+                line.Matches,
+                tickSource ?? TickSources.ImpliedOpen,
+                ct);
             lines.Add(new ImpliedOpenApplyLine(
                 franchise.Id,
                 franchise.Ticker,
@@ -193,7 +219,12 @@ public sealed class ImpliedOpenService
             at);
     }
 
-    private async Task ApplyPriceAsync(Franchise franchise, decimal price, int matches, CancellationToken ct)
+    private async Task ApplyPriceAsync(
+        Franchise franchise,
+        decimal price,
+        int matches,
+        string tickSource,
+        CancellationToken ct)
     {
         var pool = await _db.LockPoolAsync(franchise.Id, ct);
         var target = ShockMath.Clamp(price, _decay.PriceFloor, _decay.PriceCeiling);
@@ -202,7 +233,7 @@ public sealed class ImpliedOpenService
         {
             await _ledger.PostAsync(
                 EntryKinds.Revalue,
-                "implied_open",
+                tickSource,
                 franchise.Id,
                 [
                     new PostingDraft(OwnerTypes.Mint, null, AssetTypes.Cash, null, -delta),
@@ -219,16 +250,21 @@ public sealed class ImpliedOpenService
             FranchiseId = franchise.Id,
             Price = pool.ShareReserve == 0 ? 0 : pool.CashReserve / pool.ShareReserve,
             Seq = pool.Seq,
-            Source = TickSources.ImpliedOpen,
+            Source = tickSource,
             At = DateTimeOffset.UtcNow
         });
+        var restore = tickSource == TickSources.ImpliedOpenRestore;
         _db.MarketEvents.Add(new MarketEvent
         {
             FranchiseId = franchise.Id,
             Kind = EventKinds.ImpliedOpen,
-            Headline = matches == 0
-                ? $"{franchise.Ticker} opened at ${target:0.00} (no mapped history)"
-                : $"{franchise.Ticker} opened at ${target:0.00} from {matches} historical matches",
+            Headline = restore
+                ? matches == 0
+                    ? $"{franchise.Ticker} restored to ${target:0.00} implied open (holdings unchanged)"
+                    : $"{franchise.Ticker} restored to ${target:0.00} implied open from {matches} historical matches (holdings unchanged)"
+                : matches == 0
+                    ? $"{franchise.Ticker} opened at ${target:0.00} (no mapped history)"
+                    : $"{franchise.Ticker} opened at ${target:0.00} from {matches} historical matches",
             At = DateTimeOffset.UtcNow
         });
     }

@@ -35,10 +35,15 @@ public sealed class DecayOptions
 {
     public const string SectionName = "Decay";
 
+    /// <summary>When false, prices never drift toward Elo fair value. Off by default — this is not how listed stocks work.</summary>
+    public bool Enabled { get; set; }
+
     public decimal Lambda { get; set; } = 0.02m;
     public decimal Kappa { get; set; } = 1.2m;
     public decimal PriceFloor { get; set; } = 2.00m;
     public decimal PriceCeiling { get; set; } = 40.00m;
+
+    public bool IsActive => Enabled && Lambda > 0m;
 }
 
 public sealed class HaltOptions
@@ -76,6 +81,13 @@ public sealed class ImpliedOpenOptions
 
     /// <summary>Rescale the book so the mean opening price stays at Market:InitialPrice.</summary>
     public bool RescaleToInitial { get; set; } = true;
+
+    /// <summary>
+    /// One-shot: if decay ticks exist and a restore has not run, re-apply implied open.
+    /// Pool cash is revalued so marks match the replay; user cash and share holdings are not touched.
+    /// No-ops after the restore tick is written, even if this stays true.
+    /// </summary>
+    public bool RestoreAfterDecay { get; set; } = true;
 }
 
 public sealed class DiscordOptions

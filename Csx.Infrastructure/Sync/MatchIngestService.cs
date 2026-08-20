@@ -69,6 +69,10 @@ public sealed class MatchIngestService
                 await UpsertMatchAsync(dto, enqueueIfFinal: true, ct);
         }
 
+        var restore = await _impliedOpen.RestoreOnceAfterDecayAsync(ct);
+        if (restore.Applied)
+            _log.LogInformation("Decay unwind restored implied open on {Lines} tickers", restore.Lines.Count);
+
         var upcoming = await _core.GetUpcomingMatchesAsync(season, ct);
         foreach (var dto in upcoming)
             await UpsertMatchAsync(dto, enqueueIfFinal: false, ct);

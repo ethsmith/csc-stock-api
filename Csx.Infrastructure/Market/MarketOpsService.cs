@@ -94,6 +94,8 @@ public sealed class MarketOpsService
 
     public async Task DecayTickAsync(CancellationToken ct)
     {
+        if (!_decay.IsActive) return;
+
         var meanElo = await _db.Franchises.Where(f => f.IsActive).AverageAsync(f => (decimal?)f.Elo, ct) ?? 1000m;
         var pools = await _db.Pools.Include(p => p.Franchise)
             .Where(p => !p.IsHalted && p.Franchise.IsActive)

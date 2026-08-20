@@ -36,6 +36,8 @@ dotnet run --project csc-stock-api
 
 On first boot the API migrates Postgres, then `MatchIngestHostedService` pulls season franchises/matches from `https://core.playcsc.com/graphql` every 60s. The first sync also runs an **implied open**: it replays completed matches from `ImpliedOpen:FromSeason` (default 11) through the active season onto today's tickers (org prefix + tier), then reseeds each pool so launch prices are not a flat $10. The book is rescaled so the mean stays at `Market:InitialPrice`. Teams with no mapped history stay at $10 before that rescale. Current-season completed matches are marked settled so ingest does not apply those results twice.
 
+Prices move on AMM trades and match settlements only. Elo **decay** toward a model fair value is off (`Decay:Enabled` defaults to `false`). If a book still has decay ticks from an earlier run, ingest re-applies implied open **once** (`ImpliedOpen:RestoreAfterDecay`) by revaluing pool cash. User cash and share holdings are not changed. After that restore tick exists, the one-shot is a no-op.
+
 The board only lists **active** CSC lines (org + tier). If Core stops fielding a line, holders are redeemed at the last mark, the pool is halted as `Delisted`, and the ticker drops off the board. A later season that fields the same org+tier reuses that ticker (Core team ids change every season; we do not mint `ATLP2`).
 
 Re-run later (admin):

@@ -149,6 +149,10 @@ public sealed class DecayTickHostedService : BackgroundService
             try
             {
                 await using var scope = _scopes.CreateAsyncScope();
+                var decay = scope.ServiceProvider.GetRequiredService<IOptions<DecayOptions>>().Value;
+                if (!decay.IsActive)
+                    continue;
+
                 await scope.ServiceProvider.GetRequiredService<MarketOpsService>().DecayTickAsync(stoppingToken);
                 _log.LogInformation("Decay tick applied");
             }

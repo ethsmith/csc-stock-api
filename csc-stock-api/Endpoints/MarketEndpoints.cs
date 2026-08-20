@@ -43,7 +43,7 @@ public static class MarketEndpoints
                 s.Beta.ToString("0.00"),
                 s.EloDivisor.ToString("0.00"),
                 MoneyFormat.Pct(b.DailyMovePct),
-                d.Lambda.ToString("0.0000"),
+                (d.IsActive ? d.Lambda : 0m).ToString("0.0000"),
                 MoneyFormat.Price(d.PriceFloor),
                 MoneyFormat.Price(d.PriceCeiling),
                 halt.Value.PreMatchMinutes,

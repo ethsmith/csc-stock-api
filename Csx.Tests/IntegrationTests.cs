@@ -223,6 +223,44 @@ public class LedgerAndMarketTests : IAsyncLifetime
     }
 
     [DockerFact]
+    public async Task Disabled_decay_does_not_revalue_or_write_ticks()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<CsxDbContext>();
+        var ops = scope.ServiceProvider.GetRequiredService<MarketOpsService>();
+        var franchise = new Franchise
+        {
+            Ticker = "NODCY",
+            Name = "No Decay",
+            ExternalTeamId = 999004,
+            IsActive = true,
+            Elo = 1400,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.Franchises.Add(franchise);
+        await db.SaveChangesAsync();
+        await ops.SeedPoolAsync(franchise, CancellationToken.None);
+
+        var cashBefore = (await db.Pools.SingleAsync(p => p.FranchiseId == franchise.Id)).CashReserve;
+        await ops.DecayTickAsync(CancellationToken.None);
+
+        var pool = await db.Pools.AsNoTracking().SingleAsync(p => p.FranchiseId == franchise.Id);
+        pool.CashReserve.Should().Be(cashBefore);
+        (await db.PriceTicks.CountAsync(t => t.FranchiseId == franchise.Id && t.Source == TickSources.Decay))
+            .Should().Be(0);
+    }
+
+    [DockerFact]
+    public async Task Restore_after_decay_skips_when_no_decay_ticks()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var implied = scope.ServiceProvider.GetRequiredService<ImpliedOpenService>();
+        var r = await implied.RestoreOnceAfterDecayAsync(CancellationToken.None);
+        r.Skipped.Should().BeTrue();
+        r.Reason.Should().Be("no decay ticks");
+    }
+
+    [DockerFact]
     public async Task Parallel_buys_match_sequential_replay()
     {
         await using var scope = _factory.Services.CreateAsyncScope();
